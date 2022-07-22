@@ -18,8 +18,16 @@
 #  MA 02110-1301, USA.
 
 import asyncio
+import collections
+import enum
 import logging
 logger = logging.getLogger('pdud.listener')
+
+Notification = collections.namedTuple("Notification", ("port", "state"))
+
+class PortState(enum.Enum):
+    ON = "on"
+    OFF = "off"
 
 
 class Args(object):
@@ -65,7 +73,7 @@ def parse_http(data, path):
     return args
 
 
-async def process_request(args, config, daemon):
+async def process_request(args, config, daemon, notification_queue):
     if args.request in ["on", "off"] and args.delay is not None:
         logger.warn("delay parameter is deprecated for on/off commands")
     if args.delay is not None:
@@ -98,13 +106,18 @@ async def process_request(args, config, daemon):
         logger.info("Unknown request: %s", args.request)
         return False
     runner = daemon.runners[args.hostname]
+    # TODO: if args.request == "subscribe":
     if args.request == "reboot":
         logger.debug("reboot requested, submitting off/on")
+
+        await notification_queue.put(Notification(int(args.port), PortState.OFF))
         await runner.do_job_async(int(args.port), "off")
         await asyncio.sleep(int(args.delay))
+        await notification_queue.put(Notification(int(args.port), PortState.ON))
         await runner.do_job_async(int(args.port), "on")
         return True
     else:
         await asyncio.sleep(int(args.delay))
+        await notification_queue.put(Notification(int(args.port), PortState.ON if args.request == "on" else PortState.OFF))
         await runner.do_job_async(int(args.port), args.request)
         return True

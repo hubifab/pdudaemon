@@ -17,6 +17,7 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 
+import asyncio
 import urllib.parse as urlparse
 import logging
 import pdudaemon.listener as listener
@@ -40,6 +41,7 @@ class HTTPListener:
             web.get('/power/control/reboot', self.handle),
         ])
         self.apprunner = None
+        self.notification_queue = asyncio.Queue(maxsize=10)
 
     async def start(self):
         logger.info("Starting the HTTP server")
@@ -69,5 +71,5 @@ class HTTPListener:
     async def insert_request(self, data, path):
         args = listener.parse_http(data, path)
         if args:
-            return await listener.process_request(args, self.config, self.daemon)
+            return await listener.process_request(args, self.config, self.daemon, self.notification_queue)
 
